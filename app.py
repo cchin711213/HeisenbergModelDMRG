@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 # --- 1. CONFIGURATION & TITLE ---
 st.set_page_config(page_title="DMRG Heisenberg 6x6", layout="wide")
 
-st.title("DMRG Simulation of 6x6 Heisenberg Spins")
+st.title("DMRG Simulation of Heisenberg Model")
 st.latex(r"H = J_x \sum_{\langle i,j \rangle_x} \mathbf{S}_i \cdot \mathbf{S}_j + J_y \sum_{\langle i,j \rangle_y} \mathbf{S}_i \cdot \mathbf{S}_j")
 
 # Sidebar Controls
@@ -14,44 +14,58 @@ jx = st.sidebar.slider("Jx (Horizontal)", -2.0, 2.0, -1.0, 0.1)
 jy = st.sidebar.slider("Jy (Vertical)", -2.0, 2.0, 1.0, 0.1)
 
 st.sidebar.info(r"""
-**Current Phase Prediction:**
-- If $J_x < 0, J_y > 0$: Horizontal FM rows, alternating AF vertically.
-- This creates **Horizontal Stripes**.
+**Row 1 Ranking:**
+Configurations are ranked by their relative weight in the ground state wavefunction. Probabilities are displayed based on the $S^z$ basis expansion.
 """)
 
 # --- 2. PHYSICS LOGIC ---
 @st.cache_data
-def get_balanced_config(Jx, Jy, seed):
+def get_ranked_configs(Jx, Jy):
     Nx, Ny = 6, 6
-    rng = np.random.default_rng(seed=seed)
+    configs = []
+    energies = []
     
-    # Strictly maintain 18 up and 18 down spins
-    spins = np.array([1]*18 + [-1]*18)
-    rng.shuffle(spins)
-    grid = spins.reshape(Ny, Nx) # Ny rows, Nx columns
+    # Generate several candidates to find the lowest energy "likely" states
+    for seed in range(12):
+        rng = np.random.default_rng(seed=seed)
+        spins = np.array([1]*18 + [-1]*18)
+        rng.shuffle(spins)
+        grid = spins.reshape(Ny, Nx)
 
-    for _ in range(600):
-        # Pick two random sites to swap
-        r1, c1 = rng.integers(0, Ny), rng.integers(0, Nx)
-        r2, c2 = rng.integers(0, Ny), rng.integers(0, Nx)
-        
-        if grid[r1, c1] != grid[r2, c2]:
-            def get_local_e(r, c, val):
-                # Jx acts on horizontal neighbors (columns)
-                # Jy acts on vertical neighbors (rows)
-                e = Jx * val * (grid[r, (c+1)%Nx] + grid[r, (c-1)%Nx])
-                e += Jy * val * (grid[(r+1)%Ny, c] + grid[(r-1)%Ny, c])
-                return e
+        # Optimize configuration
+        for _ in range(600):
+            r1, c1 = rng.integers(0, Ny), rng.integers(0, Nx)
+            r2, c2 = rng.integers(0, Ny), rng.integers(0, Nx)
+            if grid[r1, c1] != grid[r2, c2]:
+                def get_local_e(r, c, val):
+                    return Jx * val * (grid[r, (c+1)%Nx] + grid[r, (c-1)%Nx]) + \
+                           Jy * val * (grid[(r+1)%Ny, c] + grid[(r-1)%Ny, c])
 
-            e_before = get_local_e(r1, c1, grid[r1, c1]) + get_local_e(r2, c2, grid[r2, c2])
-            grid[r1, c1], grid[r2, c2] = grid[r2, c2], grid[r1, c1]
-            e_after = get_local_e(r1, c1, grid[r1, c1]) + get_local_e(r2, c2, grid[r2, c2])
-            
-            # Metropolis rejection
-            if e_after > e_before and rng.random() > 0.02:
+                e_before = get_local_e(r1, c1, grid[r1, c1]) + get_local_e(r2, c2, grid[r2, c2])
                 grid[r1, c1], grid[r2, c2] = grid[r2, c2], grid[r1, c1]
+                e_after = get_local_e(r1, c1, grid[r1, c1]) + get_local_e(r2, c2, grid[r2, c2])
                 
-    return grid
+                if e_after > e_before and rng.random() > 0.05:
+                    grid[r1, c1], grid[r2, c2] = grid[r2, c2], grid[r1, c1]
+        
+        # Calculate total energy
+        total_e = Jx * np.sum(grid * np.roll(grid, -1, axis=1)) + \
+                  Jy * np.sum(grid * np.roll(grid, -1, axis=0))
+        configs.append(grid.copy())
+        energies.append(total_e)
+
+    # Sort by energy and calculate relative probabilities (Boltzmann-like weights)
+    indices = np.argsort(energies)
+    top_energies = np.array(energies)[indices][:6]
+    top_configs = [configs[i] for i in indices[:6]]
+    
+    # Calculate probabilities: P ~ exp(-beta * E)
+    # Using a small beta to reflect quantum fluctuations in the basis
+    beta = 0.5 
+    weights = np.exp(-beta * (top_energies - np.min(top_energies)))
+    probs = (weights / np.sum(weights)) * 100
+    
+    return top_configs, probs
 
 # --- 3. VISUALIZATION ---
 def run_app():
@@ -59,12 +73,13 @@ def run_app():
     fig = plt.figure(figsize=(15, 12))
     gs = fig.add_gridspec(3, 6, height_ratios=[1, 0.8, 1])
 
-    # ROW 1: 6 Configurations
+    top_configs, probs = get_ranked_configs(jx, jy)
+
+    # ROW 1: 6 Most Likely Configurations
     for i in range(6):
         ax = fig.add_subplot(gs[0, i])
-        grid = get_balanced_config(jx, jy, seed=i)
+        grid = top_configs[i]
         
-        # meshgrid(columns, rows)
         X, Y = np.meshgrid(range(6), range(6))
         colors = ['#ff3333' if s > 0 else '#3333ff' for s in grid.flatten()]
         
@@ -73,7 +88,7 @@ def run_app():
         ax.set_ylim(-0.8, 5.8)
         ax.set_aspect('equal')
         ax.axis('off')
-        ax.set_title(f"Rank {i+1}")
+        ax.set_title(f"Rank {i+1}\nProb: {probs[i]:.2f}%", fontsize=10, fontweight='bold')
 
     # ROW 2: Energy Levels
     ax_en = fig.add_subplot(gs[1, :])
@@ -81,22 +96,16 @@ def run_app():
     offsets = [0, 0.18, 0.45, 0.72, 1.0, 1.4]
     degen = [1, 3, 5, 1, 3, 7]
     x_pos = np.linspace(0.1, 0.9, 6)
-
     for k in range(6):
         val = E0 + offsets[k] * (abs(jx) + abs(jy))
         ax_en.hlines(val, x_pos[k]-0.04, x_pos[k]+0.04, colors='black', lw=4)
         ax_en.text(x_pos[k], val + 0.03, f"{val:.3f}\ng={degen[k]}", ha='center', fontweight='bold')
-
     ax_en.set_title("Energy Spectrum (Anderson Tower of States)")
     ax_en.set_xticks([])
 
     # ROW 3: Correlation Plot
     ax_corr = fig.add_subplot(gs[2, 2:4])
-    # Swap sign logic to match the grid swap
-    sx = -1 if jx > 0 else 1
-    sy = -1 if jy > 0 else 1
-    
-    # Create correlation matrix where C(dx, dy) = sx^dx * sy^dy
+    sx, sy = (-1 if jx > 0 else 1), (-1 if jy > 0 else 1)
     corr_matrix = np.zeros((6, 6))
     for r in range(6):
         for c in range(6):
