@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 # --- 1. CONFIGURATION & TITLE ---
 st.set_page_config(page_title="DMRG Heisenberg 6x6", layout="wide")
 
-st.title("DMRG Simulation of Heisenberg Model")
+st.title("DMRG Simulation of 36 Heisenberg Spins")
 st.latex(r"H = J_x \sum_{\langle i,j \rangle_x} \mathbf{S}_i \cdot \mathbf{S}_j + J_y \sum_{\langle i,j \rangle_y} \mathbf{S}_i \cdot \mathbf{S}_j")
 
 # Sidebar Controls
