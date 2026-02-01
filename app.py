@@ -2,12 +2,12 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 
-# --- 1. CONFIGURATION ---
+# --- 1. CONFIGURATION & TITLE ---
 st.set_page_config(page_title="DMRG Heisenberg 6x6", layout="wide")
 
-# Standard Streamlit title for maximum compatibility
+# Safe Title Implementation
 st.title("DMRG Simulation of Heisenberg Model")
-st.write(r"#### $H = J_x \sum_{\langle i,j \rangle_x} \mathbf{S}_i \cdot \mathbf{S}_j + J_y \sum_{\langle i,j \rangle_y} \mathbf{S}_i \cdot \mathbf{S}_j$")
+st.latex(r"H = J_x \sum_{\langle i,j \rangle_x} \mathbf{S}_i \cdot \mathbf{S}_j + J_y \sum_{\langle i,j \rangle_y} \mathbf{S}_i \cdot \mathbf{S}_j")
 
 # Sidebar Controls
 st.sidebar.header("Interaction Parameters")
@@ -21,7 +21,7 @@ st.sidebar.info(r"""
 - **Symmetry:** $S^z_{total} = 0$
 """)
 
-# --- 2. PHYSICS LOGIC (Restored Exact Functions) ---
+# --- 2. PHYSICS LOGIC ---
 def get_balanced_config(Jx, Jy, seed):
     Nx, Ny = 6, 6
     N = Nx * Ny
@@ -54,6 +54,8 @@ def get_balanced_config(Jx, Jy, seed):
 
 # --- 3. VISUALIZATION ---
 def run_app():
+    # Force a fresh figure to prevent overlapping plots
+    plt.clf()
     fig = plt.figure(figsize=(15, 12))
     gs = fig.add_gridspec(3, 6, height_ratios=[1, 0.8, 1])
 
@@ -67,20 +69,3 @@ def run_app():
         
         # s=550 with the buffer ensures balls are full and touching
         ax.scatter(X, Y, c=colors, s=550, edgecolors='black', linewidth=0.5)
-        ax.set_xlim(-0.8, 5.8)
-        ax.set_ylim(-0.8, 5.8)
-        ax.set_aspect('equal')
-        ax.axis('off')
-        ax.set_title(f"Rank {i+1}", fontsize=11)
-
-    # ROW 2: 6 Lowest Eigenenergies (Horizontal lines + Degeneracy)
-    ax_en = fig.add_subplot(gs[1, :])
-    # Energy Spectrum Model for Sz=0
-    E0 = - (abs(jx) + abs(jy)) * 9 * 0.73
-    offsets = [0, 0.18, 0.45, 0.72, 1.0, 1.4]
-    degen = [1, 3, 5, 1, 3, 7]
-    x_pos = np.linspace(0.1, 0.9, 6)
-
-    for k in range(6):
-        val = E0 + offsets[k] * (abs(jx) + abs(jy))
-        ax_en.hlines(val, x_pos[k]-0.04, x_pos[k]+0.04, colors='black', lw=4)
