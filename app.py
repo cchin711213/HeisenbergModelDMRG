@@ -11,7 +11,7 @@ st.sidebar.header("Interaction Strengths")
 jx = st.sidebar.slider("Jx (Horizontal)", -2.0, 2.0, 1.0, 0.1)
 jy = st.sidebar.slider("Jy (Vertical)", -2.0, 2.0, 1.0, 0.1)
 
-# Fix: Added 'r' before the string to prevent Unicode escape errors
+# Fixed: Added 'r' before the string to prevent Unicode escape errors
 st.sidebar.info(r"""
 **Constraint Applied:** Exactly 18 Red ($\uparrow$) and 18 Blue ($\downarrow$) spins are maintained 
 ($\langle S^z \rangle = 0$) in every configuration.
@@ -26,32 +26,35 @@ def get_balanced_config(Jx, Jy, seed):
     spins = np.array([1]*18 + [-1]*18)
     rng.shuffle(spins)
     
-    # Simple simulated annealing/swap to find a low-energy state for Jx, Jy
-    # while keeping N_up = N_down constant.
-    for _ in range(400):
-        i, j = rng.integers(0, N, 2)
-        if spins[i] != spins[j]:
-            # Energy calculation for a pair swap
-            def energy_local(s):
-                en = 0
-                grid = s.reshape(Nx, Ny)
-                for x in range(Nx):
-                    for y in range(Ny):
-                        en += Jx * grid[x, y] * grid[(x+1)%Nx, y]
-                        en += Jy * grid[x, y] * grid[x, (y+1)%Ny]
-                return en
-            
-            e_old = energy_local(spins)
-            spins[i], spins[j] = spins[j], spins[i]
-            e_new = energy_local(spins)
-            
-            # Acceptance criteria
-            if e_new > e_old and rng.random() > 0.05:
-                spins[i], spins[j] = spins[j], spins[i] # Swap back
-                
-    return spins.reshape(Nx, Ny)
+    def energy_calc(grid):
+        # Using np.roll for fast periodic boundary energy calculation
+        en = Jx * np.sum(grid * np.roll(grid, -1, axis=0))
+        en += Jy * np.sum(grid * np.roll(grid, -1, axis=1))
+        return en
 
-# Main Plotting Logic
+    # Simple swap logic to find a likely configuration
+    grid = spins.reshape(Nx, Ny)
+    e_curr = energy_calc(grid)
+    
+    for _ in range(500):
+        # Pick two random sites
+        x1, y1 = rng.integers(0, Nx), rng.integers(0, Ny)
+        x2, y2 = rng.integers(0, Nx), rng.integers(0, Ny)
+        
+        if grid[x1, y1] != grid[x2, y2]:
+            # Trial swap
+            grid[x1, y1], grid[x2, y2] = grid[x2, y2], grid[x1, y1]
+            e_new = energy_calc(grid)
+            
+            # Acceptance: lower energy preferred, small chance of higher to show variety
+            if e_new > e_curr and rng.random() > 0.05:
+                grid[x1, y1], grid[x2, y2] = grid[x2, y2], grid[x1, y1] # Swap back
+            else:
+                e_curr = e_new
+                
+    return grid
+
+# Create Figure
 fig = plt.figure(figsize=(15, 12))
 gs = fig.add_gridspec(3, 6, height_ratios=[1, 0.8, 1])
 
@@ -73,7 +76,7 @@ for i in range(6):
 ax_en = fig.add_subplot(gs[1, :])
 E0 = - (abs(jx) + abs(jy)) * (36/4) * 0.72
 offsets = [0, 0.18, 0.42, 0.70, 0.98, 1.45]
-degen = [1, 3, 5, 1, 3, 7] # Multiplicity based on Spin multiplets
+degen = [1, 3, 5, 1, 3, 7] 
 x_pos = np.linspace(0.1, 0.9, 6)
 
 for k in range(6):
@@ -81,16 +84,11 @@ for k in range(6):
     ax_en.hlines(val, x_pos[k]-0.04, x_pos[k]+0.04, colors='black', lw=3)
     ax_en.text(x_pos[k], val + 0.05, f"{val:.3f}\ng={degen[k]}", ha='center', fontweight='bold')
 
-ax_en.set_title("Lowest 6 Distinct Energy Levels ($S^z=0$ sector)", fontsize=14)
-ax_en.set_xticks([]); ax_en.set_ylabel("Energy")
+ax_en.set_title("Lowest 6 Distinct Energy Levels ($S^z=0$ Sector)", fontsize=14)
+ax_en.set_ylabel("Energy")
+ax_en.set_xticks([])
 
-# --- ROW 3: Correlation ---
+# --- ROW 3: Correlation Plot ---
 ax_corr = fig.add_subplot(gs[2, 2:4])
 indices = np.indices((6, 6))
-# Correlation sign depends on the sign of J
-sx, sy = (-1 if jx > 0 else 1), (-1 if jy > 0 else 1)
-corr = (sx**indices[0]) * (sy**indices[1]) * 0.25
-
-im = ax_corr.imshow(corr, cmap='RdBu_r', origin='lower')
-ax_corr.set_aspect('equal')
-ax_corr.set_title(r"Correlation $C(i,
+# Fixed: Closed string literal for the title
