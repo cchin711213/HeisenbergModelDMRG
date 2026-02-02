@@ -23,7 +23,7 @@ st.sidebar.info(r"""
 # --- 2. PHYSICS LOGIC ---
 @st.cache_data
 def get_ranked_configs(Jx, Jy):
-    Nx, Ny = 8, 8
+    Nx, Ny = 6, 6
     configs = []
     energies = []
     
